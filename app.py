@@ -1,3 +1,4 @@
+import stat
 from flask import Flask, request, jsonify, render_template
 from urllib.parse import urlparse, parse_qs
 import pymazda
@@ -45,8 +46,8 @@ async def getStatus() -> None:
   await client.close()
   return jsonify(status)
 
-@app.post("/checkDoors")
-async def checkDoors() -> None:
+@app.post("/checkMyCar")
+async def checkMyCar() -> None:
   r = request.json
   username = r.get('username')
   password = r.get('password')
@@ -54,14 +55,21 @@ async def checkDoors() -> None:
   vid = r.get('vid')
   client = pymazda.Client(username, password, region)
   status = await client.get_vehicle_status(vid)
-  msg = "Doors seem ok."
+
+  # fuelLidOpen seems to always be true
+  if 'fuelLidOpen' in status['doors']:
+    del status['doors']['fuelLidOpen']
+
+  msg = "Doors locked."
   if any(status['doors'].values()):
-    return "Doors open. Please check your vehicle."
+    msg = "Doors open. Please check your vehicle."
   elif any(status['doorLocks'].values()):
     msg = "Some doors were unlocked. Will attempt to lock."
+    await client.lock_doors(vid)
   if any(status['windows'].values()):
-    msg += "Windows were open."
-  await client.lock_doors(vid)
+    msg = "Windows were open."
+    await client.lock_doors(vid)
+  msg += f" fuel at {status['fuelRemainingPercent']} percent"
   await client.close()
   return msg
 
